@@ -3,6 +3,7 @@
     "name": "steam-currency-converter",
     "common_name": "Steam Currency Converter",
     "description": "Converts Steam Store and Market prices to your local currency.",
+    "author": "MehmetCanWT",
     "backendType": "lua",
     "webkitApiVersion": "2.0.0"
 }
