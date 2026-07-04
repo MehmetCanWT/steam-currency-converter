@@ -11,7 +11,9 @@ const getRatesAndSettings = async () => {
 	return JSON.parse(res) as { rates: Record<string, number>; timestamp: number; targetCurrency: string; displayMode: string };
 };
 
-const pricePattern = /(?:\$|USD|€|EUR|£|GBP|₺|TL|TRY|₽|RUB)\s*(\d+(?:[.,]\d+)?)|(\d+(?:[.,]\d+)?)\s*(?:\$|USD|€|EUR|£|GBP|₺|TL|TRY|₽|RUB)/i;
+// Regex patterns to match price structures, including currency symbols/codes and decimals/thousands separators
+const pricePattern = /(?:(?:\$|USD|€|EUR|£|GBP|₺|TL|TRY|₽|RUB)\s*(\d+(?:[\d.,]*\d+)?)(?:\s*(?:USD|EUR|GBP|TRY|RUB|TL))?)|(?:(\d+(?:[\d.,]*\d+)?)\s*(?:\$|USD|€|EUR|£|GBP|₺|TL|TRY|₽|RUB))/i;
+const pricePatternGlobal = /(?:(?:\$|USD|€|EUR|£|GBP|₺|TL|TRY|₽|RUB)\s*\d+(?:[\d.,]*\d+)?(?:\s*(?:USD|EUR|GBP|TRY|RUB|TL))?)|(?:\d+(?:[\d.,]*\d+)?\s*(?:\$|USD|€|EUR|£|GBP|₺|TL|TRY|₽|RUB))/gi;
 
 function detectSourceCurrency(str: string): string {
 	const s = str.toUpperCase();
@@ -49,6 +51,7 @@ function parsePriceValue(str: string): number {
 function formatPrice(value: number, currency: string): string {
 	if (isNaN(value)) return '';
 
+	// Use user's system locale for decimal/thousands formatting
 	const formattedNum = value.toLocaleString(undefined, {
 		minimumFractionDigits: 2,
 		maximumFractionDigits: 2,
@@ -56,7 +59,7 @@ function formatPrice(value: number, currency: string): string {
 
 	switch (currency) {
 		case 'TRY':
-			return `${formattedNum} TL`;
+			return `₺${formattedNum}`; // Use standard Turkish Lira symbol prefix
 		case 'EUR':
 			return `€${formattedNum}`;
 		case 'GBP':
@@ -82,7 +85,7 @@ function convertPriceInString(
 	const rawNumberStr = match[1] || match[2];
 	if (!rawNumberStr) return null;
 
-	const sourceCurrency = detectSourceCurrency(str);
+	const sourceCurrency = detectSourceCurrency(match[0]);
 	const value = parsePriceValue(rawNumberStr);
 	if (isNaN(value)) return null;
 
@@ -110,75 +113,53 @@ function convertPriceInString(
 	return str.replace(originalPriceStr, replacement);
 }
 
-function processElement(
-	el: HTMLElement,
+// Processes individual DOM nodes recursively
+function processNode(
+	node: Node,
 	rates: Record<string, number>,
 	targetCurrency: string,
 	displayMode: string,
 ) {
-	const tagName = el.tagName.toLowerCase();
-	if (tagName === 'script' || tagName === 'style' || tagName === 'textarea') return;
+	if (node.nodeType === Node.TEXT_NODE) {
+		const text = node.nodeValue || '';
+		if (pricePattern.test(text)) {
+			const parent = node.parentElement;
+			if (!parent) return;
 
-	const isPriceSelector =
-		el.classList.contains('discount_original_price') ||
-		el.classList.contains('discount_final_price') ||
-		el.classList.contains('game_purchase_price') ||
-		el.classList.contains('search_price') ||
-		el.classList.contains('normal_price') ||
-		el.classList.contains('price') ||
-		el.classList.contains('bb_price') ||
-		el.classList.contains('purchase_price') ||
-		el.classList.contains('market_listing_price') ||
-		el.classList.contains('market_table_value') ||
-		el.classList.contains('saleprice') ||
-		el.classList.contains('cart_item_price_value') ||
-		el.classList.contains('item_desc_price') ||
-		el.classList.contains('cart_item_price') ||
-		/price/i.test(el.className);
+			const tagName = parent.tagName.toLowerCase();
+			if (tagName === 'script' || tagName === 'style' || tagName === 'textarea') return;
 
-	const directText = Array.from(el.childNodes)
-		.filter((n) => n.nodeType === Node.TEXT_NODE)
-		.map((n) => n.nodeValue)
-		.join('')
-		.trim();
+			// Skip if already processed and text hasn't changed
+			const lastProcessed = parent.getAttribute('data-converted-text');
+			if (lastProcessed === parent.textContent) {
+				return;
+			}
 
-	const hasPricePattern = pricePattern.test(directText);
-
-	if (isPriceSelector || hasPricePattern) {
-		const lastProcessedText = el.getAttribute('data-converted-text');
-		const currentText = el.textContent || '';
-
-		if (lastProcessedText === currentText) {
-			return; // Already converted and unchanged
+			const converted = convertPriceInString(text, rates, targetCurrency, displayMode);
+			if (converted) {
+				parent.setAttribute('data-original-text', text);
+				parent.setAttribute('data-converted-text', converted);
+				node.nodeValue = converted;
+			}
 		}
+	} else if (node.nodeType === Node.ELEMENT_NODE) {
+		const el = node as HTMLElement;
+		const textContent = el.textContent || '';
 
-		const originalText = currentText;
-		const converted = convertPriceInString(originalText, rates, targetCurrency, displayMode);
-		if (converted) {
-			el.setAttribute('data-original-text', originalText);
-			el.setAttribute('data-converted-text', converted);
-
-			let replaced = false;
+		// If this is a container containing multiple separate price values (e.g. original AND discounted final price),
+		// we skip converting on this container node level, and let children process their own text nodes individually.
+		// This preserves HTML structure, styles, fonts, and strikes.
+		const matches = textContent.match(pricePatternGlobal);
+		if (matches && matches.length > 1) {
 			for (let i = 0; i < el.childNodes.length; i++) {
-				const child = el.childNodes[i];
-				if (child.nodeType === Node.TEXT_NODE) {
-					const text = child.nodeValue || '';
-					if (pricePattern.test(text)) {
-						const childConverted = convertPriceInString(text, rates, targetCurrency, displayMode);
-						if (childConverted) {
-							child.nodeValue = childConverted;
-							replaced = true;
-						}
-					}
-				}
+				processNode(el.childNodes[i], rates, targetCurrency, displayMode);
 			}
-			if (!replaced) {
-				el.textContent = converted;
-			}
+			return;
 		}
-	} else {
-		for (let i = 0; i < el.children.length; i++) {
-			processElement(el.children[i] as HTMLElement, rates, targetCurrency, displayMode);
+
+		// Otherwise, process all child nodes
+		for (let i = 0; i < el.childNodes.length; i++) {
+			processNode(el.childNodes[i], rates, targetCurrency, displayMode);
 		}
 	}
 }
@@ -190,7 +171,7 @@ function startObservation(rates: Record<string, number>, targetCurrency: string,
 		observer.disconnect();
 	}
 
-	processElement(document.body, rates, targetCurrency, displayMode);
+	processNode(document.body, rates, targetCurrency, displayMode);
 
 	observer = new MutationObserver((mutations) => {
 		observer?.disconnect();
@@ -198,15 +179,10 @@ function startObservation(rates: Record<string, number>, targetCurrency: string,
 			for (const mutation of mutations) {
 				if (mutation.type === 'childList') {
 					mutation.addedNodes.forEach((node) => {
-						if (node.nodeType === Node.ELEMENT_NODE) {
-							processElement(node as HTMLElement, rates, targetCurrency, displayMode);
-						}
+						processNode(node, rates, targetCurrency, displayMode);
 					});
 				} else if (mutation.type === 'characterData') {
-					const parent = mutation.target.parentElement;
-					if (parent) {
-						processElement(parent, rates, targetCurrency, displayMode);
-					}
+					processNode(mutation.target, rates, targetCurrency, displayMode);
 				}
 			}
 		} catch (e) {
@@ -248,11 +224,18 @@ async function checkSettingsChanged(rates: Record<string, number>) {
 			currentSettings = data;
 
 			document.querySelectorAll('[data-converted-text]').forEach((el) => {
-				el.removeAttribute('data-converted-text');
 				const orig = el.getAttribute('data-original-text');
 				if (orig) {
-					el.textContent = orig;
+					// Restore original text node content
+					for (let i = 0; i < el.childNodes.length; i++) {
+						const child = el.childNodes[i];
+						if (child.nodeType === Node.TEXT_NODE) {
+							child.nodeValue = orig;
+						}
+					}
 				}
+				el.removeAttribute('data-converted-text');
+				el.removeAttribute('data-original-text');
 			});
 
 			startObservation(data.rates || rates, data.targetCurrency, data.displayMode);
