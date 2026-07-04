@@ -1,7 +1,5 @@
-# Steam Currency Converter
-
 <p align="center">
-  <img src="https://raw.githubusercontent.com/SteamClientHomebrew/Millennium/main/assets/millennium.png" alt="Millennium Logo" width="100"/>
+  <h1 align="center">🎮 Steam Currency Converter</h1>
 </p>
 
 <p align="center">
@@ -9,8 +7,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/MehmetCanWT/steam-currency-converter/blob/main/LICENSE"><img src="https://img.shields.io/github/license/MehmetCanWT/steam-currency-converter?style=flat-square" alt="License"/></a>
-  <a href="https://github.com/MehmetCanWT/steam-currency-converter/releases"><img src="https://img.shields.io/github/v/release/MehmetCanWT/steam-currency-converter?style=flat-square" alt="Version"/></a>
+  <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License"/>
+  <img src="https://img.shields.io/badge/version-1.0.0-blue?style=flat-square" alt="Version"/>
   <img src="https://img.shields.io/badge/Author-MehmetCanWT-blue?style=flat-square" alt="Author"/>
 </p>
 
