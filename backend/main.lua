@@ -3,7 +3,7 @@
 local logger = require("logger")
 local millennium = require("millennium")
 local http = require("http")
-local cjson = require("cjson")
+local json = require("json")
 local fs = require("fs")
 local utils = require("utils")
 
@@ -25,7 +25,7 @@ local function save_rates_cache(rates_data)
     local path = get_cache_path()
     if not path then return false end
 
-    local success, content = pcall(cjson.encode, rates_data)
+    local success, content = pcall(json.encode, rates_data)
     if not success then
         logger:error("Failed to encode rates to JSON: " .. tostring(content))
         return false
@@ -54,7 +54,7 @@ local function load_rates_cache()
         return nil
     end
 
-    local success, rates_data = pcall(cjson.decode, content)
+    local success, rates_data = pcall(json.decode, content)
     if not success then
         logger:error("Failed to decode rates cache JSON: " .. tostring(rates_data))
         return nil
@@ -79,7 +79,7 @@ local function _fetch_rates()
         return nil
     end
 
-    local success, api_data = pcall(cjson.decode, response.body)
+    local success, api_data = pcall(json.decode, response.body)
     if not success then
         logger:error("Failed to parse API response JSON: " .. tostring(api_data))
         return nil
@@ -139,7 +139,7 @@ end
 function fetch_rates()
     local res = _fetch_rates()
     if res then
-        return cjson.encode(res)
+        return json.encode(res)
     else
         return "null"
     end
@@ -149,7 +149,7 @@ end
 function check_and_update_rates()
     local res = _check_and_update_rates()
     if res then
-        return cjson.encode(res)
+        return json.encode(res)
     else
         return "null"
     end
@@ -170,7 +170,7 @@ function get_rates_and_settings()
         targetCurrency = target_currency,
         displayMode = display_mode
     }
-    return cjson.encode(data)
+    return json.encode(data)
 end
 
 -- Millennium standard lifecycle method: called when plugin starts
